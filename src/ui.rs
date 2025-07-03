@@ -22,7 +22,7 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                 .direction(Direction::Vertical)
                 .margin(2)
                 .constraints([
-                    Constraint::Length((game.board_size + 2) as u16),
+                    Constraint::Length((game.board_size + 3) as u16),
                     Constraint::Min(3),
                 ])
                 .split(size);
@@ -125,9 +125,24 @@ fn render_board(game: &GoGame) -> Paragraph<'_> {
     use ratatui::style::{Color, Style};
     use ratatui::text::{Span, Line, Text};
     let size = game.board_size;
-    let mut lines: Vec<Line> = Vec::with_capacity(size);
+    let mut lines: Vec<Line> = Vec::with_capacity(size + 1);
+    // Top coordinate row
+    let mut top_spans = Vec::with_capacity(size * 2 + 2);
+    top_spans.push(Span::raw("   "));
+    for x in 0..size {
+        let letter = ((b'a' + x as u8) as char).to_string();
+        top_spans.push(Span::styled(letter, Style::default().fg(Color::Yellow)));
+        if x < size - 1 {
+            top_spans.push(Span::raw(" "));
+        }
+    }
+    lines.push(Line::from(top_spans));
+    // Board rows with left coordinate
     for y in 0..size {
-        let mut spans = Vec::with_capacity(size * 2 - 1);
+        let mut spans = Vec::with_capacity(size * 2 + 2);
+        // Row letter
+        let letter = ((b'a' + y as u8) as char).to_string();
+        spans.push(Span::styled(format!("{} ", letter), Style::default().fg(Color::Yellow)));
         for x in 0..size {
             let (ch, is_grid) = match game.board[y][x] {
                 Stone::Black => ('●', false),
@@ -173,7 +188,15 @@ fn render_metadata(game: &GoGame) -> Paragraph<'_> {
         crate::sgf_parser::Player::White => "White",
     };
     let total_moves = game.moves.len();
-    let mut meta_str = format!("Move: {} / {} | Current Player: {}\n", move_num, total_moves, player);
+    // Show coordinates of the current move if available, on the first line
+    let mut coord_str = String::new();
+    if move_num > 0 && move_num <= game.moves.len() {
+        let mv = &game.moves[move_num - 1];
+        let coord = format!("{}{}", (b'a' + mv.y as u8) as char, (b'a' + mv.x as u8) as char);
+        coord_str = format!(" [{}]", coord);
+    }
+    let mut meta_str = format!("Move: {}{} / {} | Current Player: {}\n", move_num, coord_str, total_moves, player);
+
     for (k, v) in &game.metadata {
         if k != "FF" && k != "AP" && k != "GM" && k != "HA" && k != "KM" && k != "RL" && k != "RN" && k != "TC" && k != "TM" && k != "RU" && k != "TT" {
             meta_str.push_str(&format!("{}: {}\n", k, v));
