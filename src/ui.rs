@@ -10,6 +10,8 @@ enum UiMode {
     GotoMoveInput { input: String },
     HotkeyHelp,
     ModifyMoveInput { input: String },
+    SearchCoordInput { input: String },
+
 }
 
 pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
@@ -48,6 +50,7 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         "p / ←     Previous move",
                         "g         Goto move number",
                         "m         Modify current move",
+                        "/         Search for coordinate",
                         "h         Show this help",
                         "Esc/Enter Close this help",
                     ].join("\n");
@@ -57,6 +60,12 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                 UiMode::ModifyMoveInput { input } => {
                     let area = centered_rect(30, 10, size);
                     let block = Block::default().title("Modify Move").borders(Borders::ALL);
+                    let text = Paragraph::new(format!("Enter coords (e.g., dd): {}", input)).block(block);
+                    f.render_widget(text, area);
+                }
+                UiMode::SearchCoordInput { input } => {
+                    let area = centered_rect(30, 10, size);
+                    let block = Block::default().title("Search Coord").borders(Borders::ALL);
                     let text = Paragraph::new(format!("Enter coords (e.g., dd): {}", input)).block(block);
                     f.render_widget(text, area);
                 }
@@ -75,6 +84,7 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                             KeyCode::Char('g') => *mode_ref = UiMode::GotoMoveInput { input: String::new() },
                             KeyCode::Char('m') => *mode_ref = UiMode::ModifyMoveInput { input: String::new() },
                             KeyCode::Char('h') => *mode_ref = UiMode::HotkeyHelp,
+                            KeyCode::Char('/') => *mode_ref = UiMode::SearchCoordInput { input: String::new() },
                             _ => {}
                         },
                         UiMode::GotoMoveInput { input } => match key.code {
@@ -98,6 +108,30 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         },
                         UiMode::HotkeyHelp => match key.code {
                             KeyCode::Esc | KeyCode::Enter => *mode_ref = UiMode::Normal,
+                            _ => {}
+                        },
+                        UiMode::SearchCoordInput { input } => match key.code {
+                            KeyCode::Esc => *mode_ref = UiMode::Normal,
+                            KeyCode::Enter => {
+                                if input.len() == 2 {
+                                    let y = (input.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                    let x = (input.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                    if x < game.board_size && y < game.board_size {
+                                        // Search for move with (x, y)
+                                        if let Some(idx) = game.moves.iter().position(|mv| mv.x == x && mv.y == y) {
+                                            game.move_idx = idx + 1;
+                                            game.apply_moves(game.move_idx);
+                                        }
+                                    }
+                                }
+                                *mode_ref = UiMode::Normal;
+                            },
+                            KeyCode::Char(c) if c.is_ascii_lowercase() && input.len() < 2 => {
+                                input.push(c);
+                            },
+                            KeyCode::Backspace => {
+                                input.pop();
+                            },
                             _ => {}
                         },
                         UiMode::ModifyMoveInput { input } => match key.code {
@@ -174,13 +208,12 @@ fn render_board(game: &GoGame) -> Paragraph<'_> {
     };
     // Top coordinate row
     let mut top_spans = Vec::with_capacity(size * 2 + 2);
-    top_spans.push(Span::raw("   "));
+    // Shift left so letters align with lines
+    top_spans.push(Span::raw("  "));
     for x in 0..size {
+        top_spans.push(Span::raw(" "));
         let letter = ((b'a' + x as u8) as char).to_string();
         top_spans.push(Span::styled(letter, Style::default().fg(Color::Yellow)));
-        if x < size - 1 {
-            top_spans.push(Span::raw(" "));
-        }
     }
     lines.push(Line::from(top_spans));
     // Board rows with left coordinate
