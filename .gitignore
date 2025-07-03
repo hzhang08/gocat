@@ -1,0 +1,32 @@
+# Ignore all SGF files (kifu records)
+*.sgf
+
+# Rust/Cargo
+/target/
+**/target/
+Cargo.lock
+
+# Backup/Swap files
+*~
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDEs and editors
+.idea/
+.vscode/
+*.code-workspace
+
+# Byebug command history
+.byebug_history
+
+# Other common
+*.bak
+*.tmp
+
