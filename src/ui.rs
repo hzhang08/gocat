@@ -209,7 +209,7 @@ fn render_board(game: &GoGame) -> Paragraph<'_> {
     // Top coordinate row
     let mut top_spans = Vec::with_capacity(size * 2 + 2);
     // Shift left so letters align with lines
-    top_spans.push(Span::raw("  "));
+    top_spans.push(Span::raw(" "));
     for x in 0..size {
         top_spans.push(Span::raw(" "));
         let letter = ((b'a' + x as u8) as char).to_string();
