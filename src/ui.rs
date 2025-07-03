@@ -1,4 +1,5 @@
 use crate::game::{GoGame, Stone};
+use crate::sgf_parser::sgf_to_string;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
@@ -8,6 +9,7 @@ enum UiMode {
     Normal,
     GotoMoveInput { input: String },
     HotkeyHelp,
+    ModifyMoveInput { input: String },
 }
 
 pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
@@ -45,10 +47,17 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         "n / →     Next move",
                         "p / ←     Previous move",
                         "g         Goto move number",
+                        "m         Modify current move",
                         "h         Show this help",
                         "Esc/Enter Close this help",
                     ].join("\n");
                     let text = Paragraph::new(help).block(block);
+                    f.render_widget(text, area);
+                }
+                UiMode::ModifyMoveInput { input } => {
+                    let area = centered_rect(30, 10, size);
+                    let block = Block::default().title("Modify Move").borders(Borders::ALL);
+                    let text = Paragraph::new(format!("Enter coords (e.g., dd): {}", input)).block(block);
                     f.render_widget(text, area);
                 }
                 _ => {}
@@ -64,6 +73,7 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                             KeyCode::Char('n') | KeyCode::Right => game.next_move(),
                             KeyCode::Char('p') | KeyCode::Left => game.prev_move(),
                             KeyCode::Char('g') => *mode_ref = UiMode::GotoMoveInput { input: String::new() },
+                            KeyCode::Char('m') => *mode_ref = UiMode::ModifyMoveInput { input: String::new() },
                             KeyCode::Char('h') => *mode_ref = UiMode::HotkeyHelp,
                             _ => {}
                         },
@@ -88,6 +98,35 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         },
                         UiMode::HotkeyHelp => match key.code {
                             KeyCode::Esc | KeyCode::Enter => *mode_ref = UiMode::Normal,
+                            _ => {}
+                        },
+                        UiMode::ModifyMoveInput { input } => match key.code {
+                            KeyCode::Esc => *mode_ref = UiMode::Normal,
+                            KeyCode::Enter => {
+                                if input.len() == 2 && game.move_idx > 0 && game.move_idx <= game.moves.len() {
+                                    let y = (input.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                    let x = (input.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                    if x < game.board_size && y < game.board_size {
+                                        let idx = game.move_idx - 1;
+                                        game.moves[idx].x = x;
+                                        game.moves[idx].y = y;
+                                        game.original_sgf.moves[idx].x = x;
+                                        game.original_sgf.moves[idx].y = y;
+                                        game.apply_moves(game.move_idx);
+                                        // Save SGF
+                                        if let Ok(sgf_str) = sgf_to_string(&game.original_sgf) {
+                                            let _ = std::fs::write("[blockchain]vs[zorba3256]1745041370030031153.sgf", sgf_str);
+                                        }
+                                    }
+                                }
+                                *mode_ref = UiMode::Normal;
+                            },
+                            KeyCode::Char(c) if c.is_ascii_lowercase() && input.len() < 2 => {
+                                input.push(c);
+                            },
+                            KeyCode::Backspace => {
+                                input.pop();
+                            },
                             _ => {}
                         },
                     }
@@ -126,6 +165,13 @@ fn render_board(game: &GoGame) -> Paragraph<'_> {
     use ratatui::text::{Span, Line, Text};
     let size = game.board_size;
     let mut lines: Vec<Line> = Vec::with_capacity(size + 1);
+    // Determine current move coordinates if available
+    let (cur_x, cur_y) = if game.move_idx > 0 && game.move_idx <= game.moves.len() {
+        let mv = &game.moves[game.move_idx - 1];
+        (mv.x, mv.y)
+    } else {
+        (usize::MAX, usize::MAX)
+    };
     // Top coordinate row
     let mut top_spans = Vec::with_capacity(size * 2 + 2);
     top_spans.push(Span::raw("   "));
@@ -164,6 +210,9 @@ fn render_board(game: &GoGame) -> Paragraph<'_> {
             };
             if is_grid {
                 spans.push(Span::styled(ch.to_string(), Style::default().fg(Color::Blue)));
+            } else if x == cur_x && y == cur_y {
+                // Highlight the current move in red
+                spans.push(Span::styled(ch.to_string(), Style::default().fg(Color::Red)));
             } else {
                 spans.push(Span::raw(ch.to_string()));
             }

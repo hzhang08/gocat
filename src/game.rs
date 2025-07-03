@@ -13,6 +13,7 @@ pub struct GoGame {
     pub moves: Vec<Move>,
     pub move_idx: usize,
     pub metadata: Vec<(String, String)>,
+    pub original_sgf: SgfData,
 }
 
 impl GoGame {
@@ -24,33 +25,30 @@ impl GoGame {
         for &(x, y) in &sgf.aw {
             board[y][x] = Stone::White;
         }
+        let moves = sgf.moves.clone();
+        let metadata = sgf.metadata.clone();
         GoGame {
             board_size: sgf.board_size,
             board,
-            moves: sgf.moves,
+            moves,
             move_idx: 0,
-            metadata: sgf.metadata,
+            metadata,
+            original_sgf: sgf,
         }
     }
 
-    pub fn reset_board(&mut self, sgf: &SgfData) {
+    pub fn reset_board(&mut self) {
         self.board = vec![vec![Stone::Empty; self.board_size]; self.board_size];
-        for &(x, y) in &sgf.ab {
+        for &(x, y) in &self.original_sgf.ab {
             self.board[y][x] = Stone::Black;
         }
-        for &(x, y) in &sgf.aw {
+        for &(x, y) in &self.original_sgf.aw {
             self.board[y][x] = Stone::White;
         }
     }
 
     pub fn apply_moves(&mut self, up_to: usize) {
-        self.reset_board(&SgfData {
-            board_size: self.board_size,
-            moves: vec![],
-            ab: self.board.iter().enumerate().flat_map(|(y, row)| row.iter().enumerate().filter_map(move |(x, &s)| if s == Stone::Black { Some((x, y)) } else { None }).collect::<Vec<_>>()).collect(),
-            aw: self.board.iter().enumerate().flat_map(|(y, row)| row.iter().enumerate().filter_map(move |(x, &s)| if s == Stone::White { Some((x, y)) } else { None }).collect::<Vec<_>>()).collect(),
-            metadata: self.metadata.clone(),
-        });
+        self.reset_board();
         for i in 0..up_to {
             if let Some(mv) = self.moves.get(i) {
                 self.board[mv.y][mv.x] = match mv.player {

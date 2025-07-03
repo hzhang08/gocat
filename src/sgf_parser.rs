@@ -30,6 +30,32 @@ pub struct SgfData {
     pub metadata: Vec<(String, String)>,
 }
 
+pub fn sgf_to_string(sgf: &SgfData) -> Result<String, ()> {
+    let mut out = String::new();
+    out.push_str(&format!("(;SZ[{}]", sgf.board_size));
+    for (k, v) in &sgf.metadata {
+        out.push_str(&format!("{}[{}]", k, v));
+    }
+    for &(x, y) in &sgf.ab {
+        let coord = format!("{}{}", (b'a' + x as u8) as char, (b'a' + y as u8) as char);
+        out.push_str(&format!("AB[{}]", coord));
+    }
+    for &(x, y) in &sgf.aw {
+        let coord = format!("{}{}", (b'a' + x as u8) as char, (b'a' + y as u8) as char);
+        out.push_str(&format!("AW[{}]", coord));
+    }
+    for mv in &sgf.moves {
+        let coord = format!("{}{}", (b'a' + mv.x as u8) as char, (b'a' + mv.y as u8) as char);
+        let tag = match mv.player {
+            Player::Black => "B",
+            Player::White => "W",
+        };
+        out.push_str(&format!(";{}[{}]", tag, coord));
+    }
+    out.push_str(")");
+    Ok(out)
+}
+
 pub fn parse_sgf(sgf: &str) -> Result<SgfData, SgfParseError> {
     // Very minimal SGF parser for basic Go games
     let mut board_size = None;
