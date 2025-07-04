@@ -18,6 +18,27 @@ pub struct GoGame {
 }
 
 impl GoGame {
+    pub fn save_to_file(&self) -> std::io::Result<()> {
+        if let Some(path) = &self.original_sgf_path {
+            if let Ok(sgf_str) = crate::sgf_parser::sgf_to_string(&self.to_sgf_data()) {
+                std::fs::write(path, sgf_str)?;
+            }
+        }
+        Ok(())
+    }
+    pub fn to_sgf_data(&self) -> crate::sgf_parser::SgfData {
+        crate::sgf_parser::SgfData {
+            board_size: self.board_size,
+            moves: self.moves.clone(),
+            ab: self.original_sgf.ab.clone(),
+            aw: self.original_sgf.aw.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+
+}
+
+impl GoGame {
     pub fn current_triangles(&self) -> &Vec<(usize, usize)> {
         if self.move_idx > 0 && self.move_idx <= self.moves.len() {
             &self.moves[self.move_idx - 1].triangles

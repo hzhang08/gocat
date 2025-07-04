@@ -51,6 +51,8 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         "q         Quit",
                         "n / →     Next move",
                         "p / ←     Previous move",
+                        "]         Next commented move",
+                        "[         Previous commented move",
                         "g         Goto move number",
                         "m         Modify current move",
                         "/         Search for coordinate",
@@ -98,6 +100,39 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                             KeyCode::Char('q') => break,
                             KeyCode::Char('n') | KeyCode::Right => game.next_move(),
                             KeyCode::Char('p') | KeyCode::Left => game.prev_move(),
+                            KeyCode::Char(']') => {
+                                // Next move with a comment
+                                if !game.moves.is_empty() && game.move_idx < game.moves.len() {
+                                    let mut idx = game.move_idx;
+                                    while idx < game.moves.len() {
+                                        if let Some(c) = &game.moves[idx].comment {
+                                            if !c.trim().is_empty() {
+                                                game.move_idx = idx + 1;
+                                                game.apply_moves(game.move_idx);
+                                                break;
+                                            }
+                                        }
+                                        idx += 1;
+                                    }
+                                }
+                            },
+                            KeyCode::Char('[') => {
+                                // Previous move with a comment
+                                if !game.moves.is_empty() && game.move_idx > 1 {
+                                    let mut idx = game.move_idx - 2;
+                                    loop {
+                                        if let Some(c) = &game.moves[idx].comment {
+                                            if !c.trim().is_empty() {
+                                                game.move_idx = idx + 1;
+                                                game.apply_moves(game.move_idx);
+                                                break;
+                                            }
+                                        }
+                                        if idx == 0 { break; }
+                                        idx -= 1;
+                                    }
+                                }
+                            },
                             KeyCode::Char('g') => *mode_ref = UiMode::GotoMoveInput { input: String::new() },
                             KeyCode::Char('m') => *mode_ref = UiMode::ModifyMoveInput { input: String::new() },
                             KeyCode::Char('h') => *mode_ref = UiMode::HotkeyHelp,
@@ -214,9 +249,7 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                                     let trimmed = if input.trim().is_empty() { None } else { Some(input.clone()) };
                                     game.moves[idx].comment = trimmed.clone();
                                     game.original_sgf.moves[idx].comment = trimmed;
-                                    if let Ok(sgf_str) = sgf_to_string(&game.original_sgf) {
-                                        let _ = std::fs::write("[blockchain]vs[zorba3256]1745041370030031153.sgf", sgf_str);
-                                    }
+                                    let _ = game.save_to_file();
                                 }
                                 *mode_ref = UiMode::Normal;
                             },
