@@ -19,6 +19,8 @@ pub struct Move {
     pub player: Player,
     pub x: usize,
     pub y: usize,
+    pub comment: Option<String>,
+    pub triangles: Vec<(usize, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +46,7 @@ pub fn sgf_to_string(sgf: &SgfData) -> Result<String, ()> {
         let coord = format!("{}{}", (b'a' + x as u8) as char, (b'a' + y as u8) as char);
         out.push_str(&format!("AW[{}]", coord));
     }
+
     for mv in &sgf.moves {
         let coord = format!("{}{}", (b'a' + mv.x as u8) as char, (b'a' + mv.y as u8) as char);
         let tag = match mv.player {
@@ -51,6 +54,13 @@ pub fn sgf_to_string(sgf: &SgfData) -> Result<String, ()> {
             Player::White => "W",
         };
         out.push_str(&format!(";{}[{}]", tag, coord));
+        for &(x, y) in &mv.triangles {
+            let coord = format!("{}{}", (b'a' + x as u8) as char, (b'a' + y as u8) as char);
+            out.push_str(&format!("TR[{}]", coord));
+        }
+        if let Some(comment) = &mv.comment {
+            out.push_str(&format!("C[{}]", comment.replace("]", "\\]")));
+        }
     }
     out.push_str(")");
     Ok(out)
@@ -62,6 +72,7 @@ pub fn parse_sgf(sgf: &str) -> Result<SgfData, SgfParseError> {
     let mut moves = Vec::new();
     let mut ab = Vec::new();
     let mut aw = Vec::new();
+
     let mut metadata = Vec::new();
 
     let prop_re = regex::Regex::new(r"([A-Z]+)\[([^\]]*)\]").unwrap();
@@ -86,7 +97,19 @@ pub fn parse_sgf(sgf: &str) -> Result<SgfData, SgfParseError> {
                 if value.len() == 2 {
                     let (x, y) = sgf_coords_to_xy(value);
                     let player = if key == "B" { Player::Black } else { Player::White };
-                    moves.push(Move { player, x, y });
+                    moves.push(Move { player, x, y, comment: None, triangles: Vec::new() });
+                }
+            }
+            "C" => {
+                if let Some(last) = moves.last_mut() {
+                    last.comment = Some(value.to_string());
+                }
+            }
+            "TR" => {
+                if value.len() == 2 {
+                    if let Some(last) = moves.last_mut() {
+                        last.triangles.push(sgf_coords_to_xy(value));
+                    }
                 }
             }
             _ => {

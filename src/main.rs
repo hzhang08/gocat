@@ -33,7 +33,7 @@ fn main() {
         }
     };
 
-    let mut game = GoGame::new(sgf);
+    let mut game = GoGame::new(sgf, Some(args.sgf_path.clone()));
     if let Err(e) = run_ui(&mut game) {
         eprintln!("Error running UI: {}", e);
         std::process::exit(1);

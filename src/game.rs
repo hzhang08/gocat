@@ -14,10 +14,30 @@ pub struct GoGame {
     pub move_idx: usize,
     pub metadata: Vec<(String, String)>,
     pub original_sgf: SgfData,
+    pub original_sgf_path: Option<String>,
 }
 
 impl GoGame {
-    pub fn new(sgf: SgfData) -> Self {
+    pub fn current_triangles(&self) -> &Vec<(usize, usize)> {
+        if self.move_idx > 0 && self.move_idx <= self.moves.len() {
+            &self.moves[self.move_idx - 1].triangles
+        } else {
+            static EMPTY: Vec<(usize, usize)> = Vec::new();
+            &EMPTY
+        }
+    }
+    pub fn current_triangles_mut(&mut self) -> Option<&mut Vec<(usize, usize)>> {
+        if self.move_idx > 0 && self.move_idx <= self.moves.len() {
+            Some(&mut self.moves[self.move_idx - 1].triangles)
+        } else {
+            None
+        }
+    }
+}
+
+
+impl GoGame {
+    pub fn new(sgf: SgfData, sgf_path: Option<String>) -> Self {
         let mut board = vec![vec![Stone::Empty; sgf.board_size]; sgf.board_size];
         for &(x, y) in &sgf.ab {
             board[y][x] = Stone::Black;
@@ -27,13 +47,16 @@ impl GoGame {
         }
         let moves = sgf.moves.clone();
         let metadata = sgf.metadata.clone();
+
         GoGame {
             board_size: sgf.board_size,
             board,
             moves,
             move_idx: 0,
             metadata,
+
             original_sgf: sgf,
+            original_sgf_path: sgf_path,
         }
     }
 

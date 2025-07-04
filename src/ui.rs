@@ -11,6 +11,9 @@ enum UiMode {
     HotkeyHelp,
     ModifyMoveInput { input: String },
     SearchCoordInput { input: String },
+    EditCommentInput { input: String },
+    EditTrianglesInput { input: String },
+
 
 }
 
@@ -51,6 +54,8 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         "g         Goto move number",
                         "m         Modify current move",
                         "/         Search for coordinate",
+                        "c         Add/Edit move comment",
+                        "t         Add/Edit triangles",
                         "h         Show this help",
                         "Esc/Enter Close this help",
                     ].join("\n");
@@ -61,6 +66,18 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                     let area = centered_rect(30, 10, size);
                     let block = Block::default().title("Modify Move").borders(Borders::ALL);
                     let text = Paragraph::new(format!("Enter coords (e.g., dd): {}", input)).block(block);
+                    f.render_widget(text, area);
+                }
+                UiMode::EditCommentInput { input } => {
+                    let area = centered_rect(50, 10, size);
+                    let block = Block::default().title("Edit Comment").borders(Borders::ALL);
+                    let text = Paragraph::new(format!("Edit comment: {}", input)).block(block);
+                    f.render_widget(text, area);
+                }
+                UiMode::EditTrianglesInput { input } => {
+                    let area = centered_rect(60, 10, size);
+                    let block = Block::default().title("Edit Triangles").borders(Borders::ALL);
+                    let text = Paragraph::new(format!("Comma-separated coords (e.g., dd,ee,fg): {}", input)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::SearchCoordInput { input } => {
@@ -85,6 +102,24 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                             KeyCode::Char('m') => *mode_ref = UiMode::ModifyMoveInput { input: String::new() },
                             KeyCode::Char('h') => *mode_ref = UiMode::HotkeyHelp,
                             KeyCode::Char('/') => *mode_ref = UiMode::SearchCoordInput { input: String::new() },
+                            KeyCode::Char('c') => {
+                                if game.move_idx > 0 && game.move_idx <= game.moves.len() {
+                                    let comment = game.moves[game.move_idx - 1].comment.clone().unwrap_or_default();
+                                    *mode_ref = UiMode::EditCommentInput { input: comment };
+                                }
+                            },
+                            KeyCode::Char('t') => {
+                                // Prepopulate with current move's triangles
+                                let input = game.current_triangles()
+                                    .iter()
+                                    .map(|(x, y)| {
+                                        let c = |v| (b'a' + v as u8) as char;
+                                        format!("{}{}", c(*y), c(*x))
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(",");
+                                *mode_ref = UiMode::EditTrianglesInput { input };
+                            },
                             _ => {}
                         },
                         UiMode::GotoMoveInput { input } => match key.code {
@@ -127,6 +162,65 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                                 *mode_ref = UiMode::Normal;
                             },
                             KeyCode::Char(c) if c.is_ascii_lowercase() && input.len() < 2 => {
+                                input.push(c);
+                            },
+                            KeyCode::Backspace => {
+                                input.pop();
+                            },
+                            _ => {}
+                        },
+                        UiMode::EditTrianglesInput { input } => match key.code {
+                            KeyCode::Esc => *mode_ref = UiMode::Normal,
+                            KeyCode::Enter => {
+                                // Parse comma-separated coords
+                                let coords = input.split(',').filter_map(|s| {
+                                    let s = s.trim();
+                                    if s.len() == 2 {
+                                        let y = (s.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                        let x = (s.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                        Some((x, y))
+                                    } else {
+                                        None
+                                    }
+                                }).collect::<Vec<_>>();
+                                if let Some(tris) = game.current_triangles_mut() {
+                                    tris.clear();
+                                    tris.extend(&coords);
+                                }
+                                if let Some(tris) = game.original_sgf.moves.get_mut(game.move_idx.saturating_sub(1)) {
+                                    tris.triangles.clear();
+                                    tris.triangles.extend(&coords);
+                                }
+                                if let Ok(sgf_str) = sgf_to_string(&game.original_sgf) {
+                                    if let Some(path) = game.original_sgf_path.as_deref() {
+                                        let _ = std::fs::write(path, sgf_str);
+                                    }
+                                }
+                                *mode_ref = UiMode::Normal;
+                            },
+                            KeyCode::Char(c) => {
+                                input.push(c);
+                            },
+                            KeyCode::Backspace => {
+                                input.pop();
+                            },
+                            _ => {}
+                        },
+                        UiMode::EditCommentInput { input } => match key.code {
+                            KeyCode::Esc => *mode_ref = UiMode::Normal,
+                            KeyCode::Enter => {
+                                if game.move_idx > 0 && game.move_idx <= game.moves.len() {
+                                    let idx = game.move_idx - 1;
+                                    let trimmed = if input.trim().is_empty() { None } else { Some(input.clone()) };
+                                    game.moves[idx].comment = trimmed.clone();
+                                    game.original_sgf.moves[idx].comment = trimmed;
+                                    if let Ok(sgf_str) = sgf_to_string(&game.original_sgf) {
+                                        let _ = std::fs::write("[blockchain]vs[zorba3256]1745041370030031153.sgf", sgf_str);
+                                    }
+                                }
+                                *mode_ref = UiMode::Normal;
+                            },
+                            KeyCode::Char(c) => {
                                 input.push(c);
                             },
                             KeyCode::Backspace => {
@@ -223,26 +317,45 @@ fn render_board(game: &GoGame) -> Paragraph<'_> {
         let letter = ((b'a' + y as u8) as char).to_string();
         spans.push(Span::styled(format!("{} ", letter), Style::default().fg(Color::Yellow)));
         for x in 0..size {
-            let (ch, is_grid) = match game.board[y][x] {
-                Stone::Black => ('●', false),
-                Stone::White => ('○', false),
+            let triangle_here = game.current_triangles().iter().any(|&(tx, ty)| tx == x && ty == y);
+            let (ch, is_grid, triangle_on_empty) = match game.board[y][x] {
+                Stone::Black => {
+                    if triangle_here {
+                        ('▲', false, false)
+                    } else {
+                        ('●', false, false)
+                    }
+                },
+                Stone::White => {
+                    if triangle_here {
+                        ('△', false, false)
+                    } else {
+                        ('○', false, false)
+                    }
+                },
                 Stone::Empty => {
-                    let grid_ch = match (y, x) {
-                        (0, 0) => '┌',
-                        (0, xx) if xx == size - 1 => '┐',
-                        (yy, 0) if yy == size - 1 => '└',
-                        (yy, xx) if yy == size - 1 && xx == size - 1 => '┘',
-                        (0, _) => '┬',
-                        (_, 0) => '├',
-                        (yy, _) if yy == size - 1 => '┴',
-                        (_, xx) if xx == size - 1 => '┤',
-                        _ => '┼',
-                    };
-                    (grid_ch, true)
+                    if triangle_here {
+                        ('△', false, true)
+                    } else {
+                        let grid_ch = match (y, x) {
+                            (0, 0) => '┌',
+                            (0, xx) if xx == size - 1 => '┐',
+                            (yy, 0) if yy == size - 1 => '└',
+                            (yy, xx) if yy == size - 1 && xx == size - 1 => '┘',
+                            (0, _) => '┬',
+                            (_, 0) => '├',
+                            (yy, _) if yy == size - 1 => '┴',
+                            (_, xx) if xx == size - 1 => '┤',
+                            _ => '┼',
+                        };
+                        (grid_ch, true, false)
+                    }
                 }
             };
             if is_grid {
                 spans.push(Span::styled(ch.to_string(), Style::default().fg(Color::Blue)));
+            } else if triangle_here {
+                spans.push(Span::styled(ch.to_string(), Style::default().fg(Color::Yellow)));
             } else if x == cur_x && y == cur_y {
                 // Highlight the current move in red
                 spans.push(Span::styled(ch.to_string(), Style::default().fg(Color::Red)));
@@ -272,12 +385,18 @@ fn render_metadata(game: &GoGame) -> Paragraph<'_> {
     let total_moves = game.moves.len();
     // Show coordinates of the current move if available, on the first line
     let mut coord_str = String::new();
+    let mut comment_str = String::from("Comment: N/A\n");
     if move_num > 0 && move_num <= game.moves.len() {
         let mv = &game.moves[move_num - 1];
         let coord = format!("{}{}", (b'a' + mv.y as u8) as char, (b'a' + mv.x as u8) as char);
         coord_str = format!(" [{}]", coord);
+        if let Some(comment) = &mv.comment {
+            if !comment.trim().is_empty() {
+                comment_str = format!("Comment: {}\n", comment);
+            }
+        }
     }
-    let mut meta_str = format!("Move: {}{} / {} | Current Player: {}\n", move_num, coord_str, total_moves, player);
+    let mut meta_str = format!("Move: {}{} / {} | Current Player: {}\n{}", move_num, coord_str, total_moves, player, comment_str);
 
     for (k, v) in &game.metadata {
         if k != "FF" && k != "AP" && k != "GM" && k != "HA" && k != "KM" && k != "RL" && k != "RN" && k != "TC" && k != "TM" && k != "RU" && k != "TT" {
