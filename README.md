@@ -32,6 +32,7 @@ cargo run -- --help
 ```
 
 ## Notes
+- Press **h** at any time to see all available commands.
 - All `.sgf` files are ignored by git (see `.gitignore`).
 - Requires Rust and Cargo installed. Download from [rust-lang.org](https://www.rust-lang.org/tools/install).
 

@@ -396,15 +396,39 @@ fn render_metadata(game: &GoGame) -> Paragraph<'_> {
             }
         }
     }
-    let mut meta_str = format!("Move: {}{} / {} | Current Player: {}\n{}", move_num, coord_str, total_moves, player, comment_str);
-
+    use ratatui::text::{Span, Line, Text};
+    let mut lines = vec![
+        Line::from(vec![Span::styled(
+            "Press 'h' to see all available commands.",
+            ratatui::style::Style::default().fg(ratatui::style::Color::Yellow)
+        )]),
+    ];
+    let info_str = format!(
+        "Move: {}{} / {} | Current Player: {}\n{}",
+        move_num, coord_str, total_moves, player, comment_str
+    );
+    for l in info_str.lines() {
+        lines.push(Line::raw(l.to_owned()));
+    }
     for (k, v) in &game.metadata {
-        if k != "FF" && k != "AP" && k != "GM" && k != "HA" && k != "KM" && k != "RL" && k != "RN" && k != "TC" && k != "TM" && k != "RU" && k != "TT" {
-            meta_str.push_str(&format!("{}: {}\n", k, v));
+        if k != "FF"
+            && k != "AP"
+            && k != "GM"
+            && k != "HA"
+            && k != "KM"
+            && k != "RL"
+            && k != "RN"
+            && k != "TC"
+            && k != "TM"
+            && k != "RU"
+            && k != "TT"
+        {
+            lines.push(Line::raw(format!("{}: {}", k, v)));
         }
     }
-    Paragraph::new(meta_str)
-        .block(Block::default().title("Metadata").borders(Borders::ALL))
+    Paragraph::new(Text::from(lines))
+        .block(Block::default().title("Info").borders(Borders::ALL))
+
 }
 
 fn setup_terminal() -> io::Result<ratatui::Terminal<CrosstermBackend<Stdout>>> {
