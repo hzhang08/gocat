@@ -11,7 +11,7 @@
 You can install **gocat** using Cargo:
 
 ```sh
-cargo install --path .
+cargo install gocat
 ```
 
 ---
