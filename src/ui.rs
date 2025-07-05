@@ -13,9 +13,9 @@ enum UiMode {
     SearchCoordInput { input: String },
     EditCommentInput { input: String },
     EditTrianglesInput { input: String },
-
-
+    InsertMoveInput { input: String, color: crate::sgf_parser::Player },
 }
+
 
 pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
     let mut terminal = setup_terminal()?;
@@ -58,6 +58,8 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         "/         Search for coordinate",
                         "c         Add/Edit move comment",
                         "t         Add/Edit triangles",
+                        "i         Insert new move",
+                        "x         Remove current move",
                         "h         Show this help",
                         "Esc/Enter Close this help",
                     ].join("\n");
@@ -88,6 +90,16 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                     let text = Paragraph::new(format!("Enter coords (e.g., dd): {}", input)).block(block);
                     f.render_widget(text, area);
                 }
+                UiMode::InsertMoveInput { input, color } => {
+                    let area = centered_rect(40, 12, size);
+                    let block = Block::default().title("Insert Move").borders(Borders::ALL);
+                    let color_str = match color {
+                        crate::sgf_parser::Player::Black => "Black",
+                        crate::sgf_parser::Player::White => "White",
+                    };
+                    let text = Paragraph::new(format!("Enter coords (e.g., dd): {}\nColor: {} (Tab to toggle, Enter to confirm)", input, color_str)).block(block);
+                    f.render_widget(text, area);
+                }
                 _ => {}
             }
         })?;
@@ -96,7 +108,68 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                 if key.kind == KeyEventKind::Press {
                     let mode_ref = &mut mode;
                     match mode_ref {
+                        UiMode::InsertMoveInput { input, color } => match key.code {
+                            KeyCode::Esc => *mode_ref = UiMode::Normal,
+                            KeyCode::Tab => {
+                                *color = match color {
+                                    crate::sgf_parser::Player::Black => crate::sgf_parser::Player::White,
+                                    crate::sgf_parser::Player::White => crate::sgf_parser::Player::Black,
+                                };
+                            },
+                            KeyCode::Enter => {
+                                if input.len() == 2 {
+                                    let y = (input.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                    let x = (input.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
+                                    if x < game.board_size && y < game.board_size {
+                                        let new_move = crate::sgf_parser::Move {
+                                            player: color.clone(),
+                                            x,
+                                            y,
+                                            comment: None,
+                                            triangles: vec![],
+                                        };
+                                        game.moves.insert(game.move_idx, new_move.clone());
+                                        game.original_sgf.moves.insert(game.move_idx, new_move);
+                                        game.move_idx += 1;
+                                        game.apply_moves(game.move_idx);
+                                        let _ = game.save_to_file();
+                                    }
+                                }
+                                *mode_ref = UiMode::Normal;
+                            },
+                            KeyCode::Char(c) if c.is_ascii_lowercase() && input.len() < 2 => {
+                                input.push(c);
+                            },
+                            KeyCode::Backspace => {
+                                input.pop();
+                            },
+                            _ => {}
+                        },
                         UiMode::Normal => match key.code {
+                            KeyCode::Char('i') => {
+                                // Default color is opposite of the most recent move (last move on stack)
+                                let color = if game.move_idx > 0 && game.move_idx <= game.moves.len() {
+                                     match game.moves[game.move_idx - 1].player {
+                                         crate::sgf_parser::Player::Black => crate::sgf_parser::Player::White,
+                                         crate::sgf_parser::Player::White => crate::sgf_parser::Player::Black,
+                                     }
+                                 } else {
+                                     crate::sgf_parser::Player::Black // Default to Black if no moves
+                                 };
+                                 *mode_ref = UiMode::InsertMoveInput { input: String::new(), color };
+                             },
+                            KeyCode::Char('x') => {
+                                if game.move_idx > 0 && game.move_idx <= game.moves.len() {
+                                    let idx = game.move_idx - 1;
+                                    game.moves.remove(idx);
+                                    game.original_sgf.moves.remove(idx);
+                                    if game.move_idx > 1 {
+                                        game.move_idx -= 1;
+                                    }
+                                    game.apply_moves(game.move_idx);
+                                    let _ = game.save_to_file();
+                                }
+                            },
                             KeyCode::Char('q') => break,
                             KeyCode::Char('n') | KeyCode::Right => game.next_move(),
                             KeyCode::Char('p') | KeyCode::Left => game.prev_move(),
@@ -249,12 +322,8 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                                     let trimmed = if input.trim().is_empty() { None } else { Some(input.clone()) };
                                     game.moves[idx].comment = trimmed.clone();
                                     game.original_sgf.moves[idx].comment = trimmed;
-                                    let _ = game.save_to_file();
                                 }
-                                *mode_ref = UiMode::Normal;
-                            },
-                            KeyCode::Char(c) => {
-                                input.push(c);
+
                             },
                             KeyCode::Backspace => {
                                 input.pop();
@@ -274,10 +343,7 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                                         game.original_sgf.moves[idx].x = x;
                                         game.original_sgf.moves[idx].y = y;
                                         game.apply_moves(game.move_idx);
-                                        // Save SGF
-                                        if let Ok(sgf_str) = sgf_to_string(&game.original_sgf) {
-                                            let _ = std::fs::write("[blockchain]vs[zorba3256]1745041370030031153.sgf", sgf_str);
-                                        }
+                                        let _ = game.save_to_file();
                                     }
                                 }
                                 *mode_ref = UiMode::Normal;
