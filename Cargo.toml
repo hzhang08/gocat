@@ -2,7 +2,7 @@
 name = "gocat"
 version = "0.1.0"
 authors = ["Hong Zhang <mahone08@gmail.com>"]
-edition = "2025"
+edition = "2021"
 description = "A terminal SGF (Smart Game Format) viewer and editor"
 license = "GPL-3.0-only"
 repository = "https://github.com/hzhang08/gocat"
