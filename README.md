@@ -1,24 +1,17 @@
-![Screenshot of gocat in action](screenshot.png)
-
 # gocat: Terminal Go Game SGF Viewer & Editor
 
 **gocat** is a modern, interactive terminal tool for viewing and editing Go game records in SGF (Smart Game Format). It offers a powerful, keyboard-driven interface to navigate, annotate, and modify game records directly from your terminal, making it ideal for Go players and reviewers.
+
+![Screenshot of gocat in action](screenshot.png)
 
 ---
 
 ## Installation
 
-You can install **gocat** locally using Cargo:
+You can install **gocat** using Cargo:
 
 ```sh
 cargo install --path .
-```
-
-Or build and run directly from the repo:
-
-```sh
-cargo build --release
-./target/release/gocat <your_file.sgf>
 ```
 
 ---
