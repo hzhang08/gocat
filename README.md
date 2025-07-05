@@ -1,6 +1,14 @@
-# Go-Rust SGF Tool
+# gocat: Terminal Go Game SGF Viewer & Editor
 
-This project is a Rust-based tool for working with SGF (Smart Game Format) files, commonly used for storing game records (kifu) in games like Go.
+**gocat** is a modern, interactive terminal tool for viewing and editing Go game records in SGF (Smart Game Format). It offers a powerful, keyboard-driven interface to navigate, annotate, and modify game records directly from your terminal, making it ideal for Go players and reviewers.
+
+---
+
+## Screenshot
+
+![Screenshot of gocat in action](screenshot.png)
+
+---
 
 ## Features
 - Parse and process SGF files
@@ -42,4 +50,4 @@ cargo run -- --help
 - `.gitignore` - Ignored files and folders
 
 ## License
-MIT License
+GPL-3.0-only

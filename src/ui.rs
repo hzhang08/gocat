@@ -40,13 +40,13 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
             match &mode {
                 UiMode::GotoMoveInput { input } => {
                     let area = centered_rect(30, 10, size);
-                    let block = Block::default().title("Goto Move").borders(Borders::ALL);
-                    let text = Paragraph::new(format!("Enter move #: {}", input)).block(block);
+                    let block = Block::default().title("Goto Move").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
+                    let text = Paragraph::new(format!("Enter move #: {}", input)).style(Style::default().fg(Color::Yellow)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::HotkeyHelp => {
                     let area = centered_rect(50, 40, size);
-                    let block = Block::default().title("Hotkey Help").borders(Borders::ALL);
+                    let block = Block::default().title("Hotkey Help").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
                     let help = [
                         "q         Quit",
                         "n / →     Next move",
@@ -63,41 +63,41 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         "h         Show this help",
                         "Esc/Enter Close this help",
                     ].join("\n");
-                    let text = Paragraph::new(help).block(block);
+                    let text = Paragraph::new(help).style(Style::default().fg(Color::Yellow)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::ModifyMoveInput { input } => {
                     let area = centered_rect(30, 10, size);
-                    let block = Block::default().title("Modify Move").borders(Borders::ALL);
+                    let block = Block::default().title("Modify Move").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
                     let text = Paragraph::new(format!("Enter coords (e.g., dd): {}", input)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::EditCommentInput { input } => {
                     let area = centered_rect(50, 10, size);
-                    let block = Block::default().title("Edit Comment").borders(Borders::ALL);
-                    let text = Paragraph::new(format!("Edit comment: {}", input)).block(block);
+                    let block = Block::default().title("Edit Comment").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
+                    let text = Paragraph::new(format!("Edit comment: {}", input)).style(Style::default().fg(Color::Yellow)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::EditTrianglesInput { input } => {
                     let area = centered_rect(60, 10, size);
-                    let block = Block::default().title("Edit Triangles").borders(Borders::ALL);
-                    let text = Paragraph::new(format!("Comma-separated coords (e.g., dd,ee,fg): {}", input)).block(block);
+                    let block = Block::default().title("Edit Triangles").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
+                    let text = Paragraph::new(format!("Comma-separated coords (e.g., dd,ee,fg): {}", input)).style(Style::default().fg(Color::Yellow)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::SearchCoordInput { input } => {
                     let area = centered_rect(30, 10, size);
-                    let block = Block::default().title("Search Coord").borders(Borders::ALL);
+                    let block = Block::default().title("Search Coord").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
                     let text = Paragraph::new(format!("Enter coords (e.g., dd): {}", input)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::InsertMoveInput { input, color } => {
                     let area = centered_rect(40, 12, size);
-                    let block = Block::default().title("Insert Move").borders(Borders::ALL);
+                    let block = Block::default().title("Insert Move").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
                     let color_str = match color {
                         crate::sgf_parser::Player::Black => "Black",
                         crate::sgf_parser::Player::White => "White",
                     };
-                    let text = Paragraph::new(format!("Enter coords (e.g., dd): {}\nColor: {} (Tab to toggle, Enter to confirm)", input, color_str)).block(block);
+                    let text = Paragraph::new(format!("Enter coords (e.g., dd): {}\nColor: {} (Tab to toggle, Enter to confirm)", input, color_str)).style(Style::default().fg(Color::Yellow)).block(block);
                     f.render_widget(text, area);
                 }
                 _ => {}
