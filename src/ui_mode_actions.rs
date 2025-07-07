@@ -201,11 +201,16 @@ pub fn handle_edit_comment_input(key: &KeyEvent, input: &mut String, game: &mut 
                 let trimmed = if input.trim().is_empty() { None } else { Some(input.clone()) };
                 game.moves[idx].comment = trimmed.clone();
                 game.original_sgf.moves[idx].comment = trimmed;
+                let _ = game.save_to_file();
             }
             Some(UiMode::Normal)
         },
         KeyCode::Backspace => {
             input.pop();
+            None
+        },
+        KeyCode::Char(c) => {
+            input.push(c);
             None
         },
         _ => None
