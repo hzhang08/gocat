@@ -1,11 +1,12 @@
 use crate::game::{GoGame, Stone};
 use crate::sgf_parser::sgf_to_string;
+use crate::ui_mode_actions::handle_edit_triangles_input;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 use std::io::{self, Stdout};
 
-enum UiMode {
+pub enum UiMode {
     Normal,
     GotoMoveInput { input: String },
     HotkeyHelp,
@@ -104,260 +105,54 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
             }
         })?;
         if event::poll(std::time::Duration::from_millis(200))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
                     let mode_ref = &mut mode;
                     match mode_ref {
-                        UiMode::InsertMoveInput { input, color } => match key.code {
-                            KeyCode::Esc => *mode_ref = UiMode::Normal,
-                            KeyCode::Tab => {
-                                *color = match color {
-                                    crate::sgf_parser::Player::Black => crate::sgf_parser::Player::White,
-                                    crate::sgf_parser::Player::White => crate::sgf_parser::Player::Black,
-                                };
-                            },
-                            KeyCode::Enter => {
-                                if input.len() == 2 {
-                                    let y = (input.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                    let x = (input.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                    if x < game.board_size && y < game.board_size {
-                                        let new_move = crate::sgf_parser::Move {
-                                            player: color.clone(),
-                                            x,
-                                            y,
-                                            comment: None,
-                                            triangles: vec![],
-                                        };
-                                        game.moves.insert(game.move_idx, new_move.clone());
-                                        game.original_sgf.moves.insert(game.move_idx, new_move);
-                                        game.move_idx += 1;
-                                        game.apply_moves(game.move_idx);
-                                        let _ = game.save_to_file();
-                                    }
-                                }
-                                *mode_ref = UiMode::Normal;
-                            },
-                            KeyCode::Char(c) if c.is_ascii_lowercase() && input.len() < 2 => {
-                                input.push(c);
-                            },
-                            KeyCode::Backspace => {
-                                input.pop();
-                            },
-                            _ => {}
+                        UiMode::InsertMoveInput { input, color } => {
+                            if let Some(new_mode) = crate::ui_mode_actions::handle_insert_move_input(&key, input, color, game) {
+                                *mode_ref = new_mode;
+                            }
                         },
-                        UiMode::Normal => match key.code {
-                            KeyCode::Char('i') => {
-                                // Default color is opposite of the most recent move (last move on stack)
-                                let color = if game.move_idx > 0 && game.move_idx <= game.moves.len() {
-                                     match game.moves[game.move_idx - 1].player {
-                                         crate::sgf_parser::Player::Black => crate::sgf_parser::Player::White,
-                                         crate::sgf_parser::Player::White => crate::sgf_parser::Player::Black,
-                                     }
-                                 } else {
-                                     crate::sgf_parser::Player::Black // Default to Black if no moves
-                                 };
-                                 *mode_ref = UiMode::InsertMoveInput { input: String::new(), color };
-                             },
-                            KeyCode::Char('x') => {
-                                if game.move_idx > 0 && game.move_idx <= game.moves.len() {
-                                    let idx = game.move_idx - 1;
-                                    game.moves.remove(idx);
-                                    game.original_sgf.moves.remove(idx);
-                                    if game.move_idx > 1 {
-                                        game.move_idx -= 1;
-                                    }
-                                    game.apply_moves(game.move_idx);
-                                    let _ = game.save_to_file();
-                                }
-                            },
-                            KeyCode::Char('q') => break,
-                            KeyCode::Char('n') | KeyCode::Right => game.next_move(),
-                            KeyCode::Char('p') | KeyCode::Left => game.prev_move(),
-                            KeyCode::Char(']') => {
-                                // Next move with a comment
-                                if !game.moves.is_empty() && game.move_idx < game.moves.len() {
-                                    let mut idx = game.move_idx;
-                                    while idx < game.moves.len() {
-                                        if let Some(c) = &game.moves[idx].comment {
-                                            if !c.trim().is_empty() {
-                                                game.move_idx = idx + 1;
-                                                game.apply_moves(game.move_idx);
-                                                break;
-                                            }
-                                        }
-                                        idx += 1;
-                                    }
-                                }
-                            },
-                            KeyCode::Char('[') => {
-                                // Previous move with a comment
-                                if !game.moves.is_empty() && game.move_idx > 1 {
-                                    let mut idx = game.move_idx - 2;
-                                    loop {
-                                        if let Some(c) = &game.moves[idx].comment {
-                                            if !c.trim().is_empty() {
-                                                game.move_idx = idx + 1;
-                                                game.apply_moves(game.move_idx);
-                                                break;
-                                            }
-                                        }
-                                        if idx == 0 { break; }
-                                        idx -= 1;
-                                    }
-                                }
-                            },
-                            KeyCode::Char('g') => *mode_ref = UiMode::GotoMoveInput { input: String::new() },
-                            KeyCode::Char('m') => *mode_ref = UiMode::ModifyMoveInput { input: String::new() },
-                            KeyCode::Char('h') => *mode_ref = UiMode::HotkeyHelp,
-                            KeyCode::Char('/') => *mode_ref = UiMode::SearchCoordInput { input: String::new() },
-                            KeyCode::Char('c') => {
-                                if game.move_idx > 0 && game.move_idx <= game.moves.len() {
-                                    let comment = game.moves[game.move_idx - 1].comment.clone().unwrap_or_default();
-                                    *mode_ref = UiMode::EditCommentInput { input: comment };
-                                }
-                            },
-                            KeyCode::Char('t') => {
-                                // Prepopulate with current move's triangles
-                                let input = game.current_triangles()
-                                    .iter()
-                                    .map(|(x, y)| {
-                                        let c = |v| (b'a' + v as u8) as char;
-                                        format!("{}{}", c(*y), c(*x))
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join(",");
-                                *mode_ref = UiMode::EditTrianglesInput { input };
-                            },
-                            _ => {}
+                        UiMode::Normal => {
+                            match crate::ui_mode_actions::handle_normal_input(&key, game) {
+                                crate::ui_mode_actions::UiAction::Quit => break,
+                                crate::ui_mode_actions::UiAction::ChangeMode(new_mode) => *mode_ref = new_mode,
+                                crate::ui_mode_actions::UiAction::Continue => {}
+                            }
                         },
-                        UiMode::GotoMoveInput { input } => match key.code {
-                            KeyCode::Esc => *mode_ref = UiMode::Normal,
-                            KeyCode::Enter => {
-                                if let Ok(num) = input.parse::<usize>() {
-                                    if num <= game.moves.len() {
-                                        game.move_idx = num;
-                                        game.apply_moves(game.move_idx);
-                                    }
-                                }
-                                *mode_ref = UiMode::Normal;
-                            },
-                            KeyCode::Char(c) if c.is_ascii_digit() => {
-                                input.push(c);
-                            },
-                            KeyCode::Backspace => {
-                                input.pop();
-                            },
-                            _ => {}
+                        UiMode::GotoMoveInput { input } => {
+                            if let Some(new_mode) = crate::ui_mode_actions::handle_goto_move_input(&key, input, game) {
+                                *mode_ref = new_mode;
+                            }
                         },
                         UiMode::HotkeyHelp => match key.code {
                             KeyCode::Esc | KeyCode::Enter => *mode_ref = UiMode::Normal,
                             _ => {}
                         },
-                        UiMode::SearchCoordInput { input } => match key.code {
-                            KeyCode::Esc => *mode_ref = UiMode::Normal,
-                            KeyCode::Enter => {
-                                if input.len() == 2 {
-                                    let y = (input.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                    let x = (input.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                    if x < game.board_size && y < game.board_size {
-                                        // Search for move with (x, y)
-                                        if let Some(idx) = game.moves.iter().position(|mv| mv.x == x && mv.y == y) {
-                                            game.move_idx = idx + 1;
-                                            game.apply_moves(game.move_idx);
-                                        }
-                                    }
-                                }
-                                *mode_ref = UiMode::Normal;
-                            },
-                            KeyCode::Char(c) if c.is_ascii_lowercase() && input.len() < 2 => {
-                                input.push(c);
-                            },
-                            KeyCode::Backspace => {
-                                input.pop();
-                            },
-                            _ => {}
+                        UiMode::SearchCoordInput { input } => {
+                            if let Some(new_mode) = crate::ui_mode_actions::handle_search_coord_input(&key, input, game) {
+                                *mode_ref = new_mode;
+                            }
                         },
-                        UiMode::EditTrianglesInput { input } => match key.code {
-                            KeyCode::Esc => *mode_ref = UiMode::Normal,
-                            KeyCode::Enter => {
-                                // Parse comma-separated coords
-                                let coords = input.split(',').filter_map(|s| {
-                                    let s = s.trim();
-                                    if s.len() == 2 {
-                                        let y = (s.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                        let x = (s.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                        Some((x, y))
-                                    } else {
-                                        None
-                                    }
-                                }).collect::<Vec<_>>();
-                                if let Some(tris) = game.current_triangles_mut() {
-                                    tris.clear();
-                                    tris.extend(&coords);
-                                }
-                                if let Some(tris) = game.original_sgf.moves.get_mut(game.move_idx.saturating_sub(1)) {
-                                    tris.triangles.clear();
-                                    tris.triangles.extend(&coords);
-                                }
-                                if let Ok(sgf_str) = sgf_to_string(&game.original_sgf) {
-                                    if let Some(path) = game.original_sgf_path.as_deref() {
-                                        let _ = std::fs::write(path, sgf_str);
-                                    }
-                                }
-                                *mode_ref = UiMode::Normal;
-                            },
-                            KeyCode::Char(c) => {
-                                input.push(c);
-                            },
-                            KeyCode::Backspace => {
-                                input.pop();
-                            },
-                            _ => {}
+                        UiMode::EditTrianglesInput { input } => {
+                            if let Some(new_mode) = handle_edit_triangles_input(&key, input, game) {
+                                *mode_ref = new_mode;
+                            }
                         },
-                        UiMode::EditCommentInput { input } => match key.code {
-                            KeyCode::Esc => *mode_ref = UiMode::Normal,
-                            KeyCode::Enter => {
-                                if game.move_idx > 0 && game.move_idx <= game.moves.len() {
-                                    let idx = game.move_idx - 1;
-                                    let trimmed = if input.trim().is_empty() { None } else { Some(input.clone()) };
-                                    game.moves[idx].comment = trimmed.clone();
-                                    game.original_sgf.moves[idx].comment = trimmed;
-                                }
-
-                            },
-                            KeyCode::Backspace => {
-                                input.pop();
-                            },
-                            _ => {}
+                        UiMode::EditCommentInput { input } => {
+                            if let Some(new_mode) = crate::ui_mode_actions::handle_edit_comment_input(&key, input, game) {
+                                *mode_ref = new_mode;
+                            }
                         },
-                        UiMode::ModifyMoveInput { input } => match key.code {
-                            KeyCode::Esc => *mode_ref = UiMode::Normal,
-                            KeyCode::Enter => {
-                                if input.len() == 2 && game.move_idx > 0 && game.move_idx <= game.moves.len() {
-                                    let y = (input.chars().nth(0).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                    let x = (input.chars().nth(1).unwrap() as u8).wrapping_sub(b'a') as usize;
-                                    if x < game.board_size && y < game.board_size {
-                                        let idx = game.move_idx - 1;
-                                        game.moves[idx].x = x;
-                                        game.moves[idx].y = y;
-                                        game.original_sgf.moves[idx].x = x;
-                                        game.original_sgf.moves[idx].y = y;
-                                        game.apply_moves(game.move_idx);
-                                        let _ = game.save_to_file();
-                                    }
-                                }
-                                *mode_ref = UiMode::Normal;
-                            },
-                            KeyCode::Char(c) if c.is_ascii_lowercase() && input.len() < 2 => {
-                                input.push(c);
-                            },
-                            KeyCode::Backspace => {
-                                input.pop();
-                            },
-                            _ => {}
+                        UiMode::ModifyMoveInput { input } => {
+                            if let Some(new_mode) = crate::ui_mode_actions::handle_modify_move_input(&key, input, game) {
+                                *mode_ref = new_mode;
+                            }
                         },
                     }
-                }
+                },
+                _ => {}
             }
         }
     }

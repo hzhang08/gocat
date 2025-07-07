@@ -1,6 +1,7 @@
 mod sgf_parser;
 mod game;
 mod ui;
+mod ui_mode_actions;
 
 use clap::Parser;
 use std::fs;
