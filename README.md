@@ -8,7 +8,15 @@
 
 ## Installation
 
-You can install **gocat** using Cargo:
+Install **gocat** via Homebrew:
+
+```sh
+brew tap hzhang08/gocat
+brew install gocat
+```
+
+
+Install **gocat** via Cargo:
 
 ```sh
 cargo install gocat
