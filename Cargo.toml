@@ -1,6 +1,6 @@
 [package]
 name = "gocat"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Hong Zhang <mahone08@gmail.com>"]
 edition = "2021"
 description = "A terminal SGF (Smart Game Format) viewer and editor"
