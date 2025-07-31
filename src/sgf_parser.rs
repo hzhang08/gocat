@@ -67,54 +67,76 @@ pub fn sgf_to_string(sgf: &SgfData) -> Result<String, ()> {
 }
 
 pub fn parse_sgf(sgf: &str) -> Result<SgfData, SgfParseError> {
-    // Very minimal SGF parser for basic Go games
+    // Enhanced SGF parser that handles multiple bracketed values for AB/AW properties
     let mut board_size = None;
     let mut moves = Vec::new();
     let mut ab = Vec::new();
     let mut aw = Vec::new();
-
     let mut metadata = Vec::new();
 
-    let prop_re = regex::Regex::new(r"([A-Z]+)\[([^\]]*)\]").unwrap();
+    // First, find all property-value pairs using a more comprehensive approach
+    let prop_re = regex::Regex::new(r"([A-Z]+)((?:\[[^\]]*\])+)").unwrap();
+    let bracket_re = regex::Regex::new(r"\[([^\]]*)\]").unwrap();
+    
     for cap in prop_re.captures_iter(sgf) {
         let key = &cap[1];
-        let value = &cap[2];
+        let values_str = &cap[2]; // This captures all bracketed values like "[dp][pd][pp]"
+        
+        // Extract all individual bracketed values
+        let values: Vec<&str> = bracket_re.captures_iter(values_str)
+            .map(|m| m.get(1).unwrap().as_str())
+            .collect();
+        
         match key {
             "SZ" => {
-                board_size = value.parse::<usize>().ok();
+                if let Some(first_value) = values.first() {
+                    board_size = first_value.parse::<usize>().ok();
+                }
             }
             "AB" => {
-                if value.len() == 2 {
-                    ab.push(sgf_coords_to_xy(value));
+                for value in values {
+                    if value.len() == 2 {
+                        ab.push(sgf_coords_to_xy(value));
+                    }
                 }
             }
             "AW" => {
-                if value.len() == 2 {
-                    aw.push(sgf_coords_to_xy(value));
+                for value in values {
+                    if value.len() == 2 {
+                        aw.push(sgf_coords_to_xy(value));
+                    }
                 }
             }
             "B" | "W" => {
-                if value.len() == 2 {
-                    let (x, y) = sgf_coords_to_xy(value);
-                    let player = if key == "B" { Player::Black } else { Player::White };
-                    moves.push(Move { player, x, y, comment: None, triangles: Vec::new() });
+                if let Some(first_value) = values.first() {
+                    if first_value.len() == 2 {
+                        let (x, y) = sgf_coords_to_xy(first_value);
+                        let player = if key == "B" { Player::Black } else { Player::White };
+                        moves.push(Move { player, x, y, comment: None, triangles: Vec::new() });
+                    }
                 }
             }
             "C" => {
-                if let Some(last) = moves.last_mut() {
-                    last.comment = Some(value.to_string());
+                if let Some(first_value) = values.first() {
+                    if let Some(last) = moves.last_mut() {
+                        last.comment = Some(first_value.to_string());
+                    }
                 }
             }
             "TR" => {
-                if value.len() == 2 {
-                    if let Some(last) = moves.last_mut() {
-                        last.triangles.push(sgf_coords_to_xy(value));
+                for value in values {
+                    if value.len() == 2 {
+                        if let Some(last) = moves.last_mut() {
+                            last.triangles.push(sgf_coords_to_xy(value));
+                        }
                     }
                 }
             }
             _ => {
-                if value.len() > 0 {
-                    metadata.push((key.to_string(), value.to_string()));
+                if let Some(first_value) = values.first() {
+                    if first_value.len() > 0 {
+                        metadata.push((key.to_string(), first_value.to_string()));
+                    }
                 }
             }
         }
