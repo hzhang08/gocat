@@ -13,6 +13,7 @@ pub enum UiMode {
     ModifyMoveInput { input: String },
     SearchCoordInput { input: String },
     EditCommentInput { input: String },
+    EditLabelInput { input: String },
     EditTrianglesInput { input: String },
     InsertMoveInput { input: String, color: crate::sgf_parser::Player },
 }
@@ -58,6 +59,7 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         "m         Modify current move",
                         "/         Search for coordinate",
                         "c         Add/Edit move comment",
+                        "l         Add/Edit move labels",
                         "t         Add/Edit triangles",
                         "i         Insert new move",
                         "x         Remove current move",
@@ -76,7 +78,13 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                 UiMode::EditCommentInput { input } => {
                     let area = centered_rect(50, 10, size);
                     let block = Block::default().title("Edit Comment").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
-                    let text = Paragraph::new(format!("Edit comment: {}", input)).style(Style::default().fg(Color::Yellow)).block(block);
+                    let text = Paragraph::new(format!("Edit comment (no underscores): {}", input)).style(Style::default().fg(Color::Yellow)).block(block);
+                    f.render_widget(text, area);
+                }
+                UiMode::EditLabelInput { input } => {
+                    let area = centered_rect(60, 10, size);
+                    let block = Block::default().title("Edit Labels").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow));
+                    let text = Paragraph::new(format!("Comma-separated labels (e.g., attack,urgent,ko): {}", input)).style(Style::default().fg(Color::Yellow)).block(block);
                     f.render_widget(text, area);
                 }
                 UiMode::EditTrianglesInput { input } => {
@@ -142,6 +150,11 @@ pub fn run_ui(game: &mut GoGame) -> io::Result<()> {
                         },
                         UiMode::EditCommentInput { input } => {
                             if let Some(new_mode) = crate::ui_mode_actions::handle_edit_comment_input(&key, input, game) {
+                                *mode_ref = new_mode;
+                            }
+                        },
+                        UiMode::EditLabelInput { input } => {
+                            if let Some(new_mode) = crate::ui_mode_actions::handle_edit_label_input(&key, input, game) {
                                 *mode_ref = new_mode;
                             }
                         },
@@ -280,13 +293,30 @@ fn render_metadata(game: &GoGame) -> Paragraph<'_> {
     // Show coordinates of the current move if available, on the first line
     let mut coord_str = String::new();
     let mut comment_str = String::from("Comment: N/A\n");
+    let mut label_str = String::from("Labels: N/A\n");
     if move_num > 0 && move_num <= game.moves.len() {
         let mv = &game.moves[move_num - 1];
         let coord = format!("{}{}", (b'a' + mv.y as u8) as char, (b'a' + mv.x as u8) as char);
         coord_str = format!(" [{}]", coord);
         if let Some(comment) = &mv.comment {
             if !comment.trim().is_empty() {
-                comment_str = format!("Comment: {}\n", comment);
+                // Split comment and labels at first underscore
+                if let Some(underscore_pos) = comment.find('_') {
+                    let comment_part = &comment[..underscore_pos];
+                    let labels_part = &comment[underscore_pos + 1..];
+                    
+                    if !comment_part.trim().is_empty() {
+                        comment_str = format!("Comment: {}\n", comment_part);
+                    }
+                    
+                    if !labels_part.trim().is_empty() {
+                        let labels = labels_part.replace('_', ", ");
+                        label_str = format!("Labels: {}\n", labels);
+                    }
+                } else {
+                    // No underscore found, treat entire string as comment
+                    comment_str = format!("Comment: {}\n", comment);
+                }
             }
         }
     }
@@ -298,8 +328,8 @@ fn render_metadata(game: &GoGame) -> Paragraph<'_> {
         )]),
     ];
     let info_str = format!(
-        "Move: {}{} / {} | Current Player: {}\n{}",
-        move_num, coord_str, total_moves, player, comment_str
+        "Move: {}{} / {} | Current Player: {}\n{}{}",
+        move_num, coord_str, total_moves, player, comment_str, label_str
     );
     for l in info_str.lines() {
         lines.push(Line::raw(l.to_owned()));

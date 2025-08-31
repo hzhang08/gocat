@@ -85,7 +85,23 @@ pub fn handle_normal_input(key: &KeyEvent, game: &mut GoGame) -> UiAction {
         KeyCode::Char('c') => {
             if game.move_idx > 0 && game.move_idx <= game.moves.len() {
                 let comment = game.moves[game.move_idx - 1].comment.clone().unwrap_or_default();
-                UiAction::ChangeMode(UiMode::EditCommentInput { input: comment })
+                // Extract only the comment part (before first underscore)
+                let comment_only = comment.split('_').next().unwrap_or("").to_string();
+                UiAction::ChangeMode(UiMode::EditCommentInput { input: comment_only })
+            } else {
+                UiAction::Continue
+            }
+        },
+        KeyCode::Char('l') => {
+            if game.move_idx > 0 && game.move_idx <= game.moves.len() {
+                let comment = game.moves[game.move_idx - 1].comment.clone().unwrap_or_default();
+                // Extract labels (everything after first underscore)
+                let labels = if let Some(underscore_pos) = comment.find('_') {
+                    comment[underscore_pos + 1..].replace('_', ",")
+                } else {
+                    String::new()
+                };
+                UiAction::ChangeMode(UiMode::EditLabelInput { input: labels })
             } else {
                 UiAction::Continue
             }
@@ -198,9 +214,22 @@ pub fn handle_edit_comment_input(key: &KeyEvent, input: &mut String, game: &mut 
         KeyCode::Enter => {
             if game.move_idx > 0 && game.move_idx <= game.moves.len() {
                 let idx = game.move_idx - 1;
-                let trimmed = if input.trim().is_empty() { None } else { Some(input.clone()) };
-                game.moves[idx].comment = trimmed.clone();
-                game.original_sgf.moves[idx].comment = trimmed;
+                let existing_comment = game.moves[idx].comment.clone().unwrap_or_default();
+                // Preserve existing labels (everything after first underscore)
+                let existing_labels = if let Some(underscore_pos) = existing_comment.find('_') {
+                    existing_comment[underscore_pos..].to_string()
+                } else {
+                    String::new()
+                };
+                
+                let new_comment = if input.trim().is_empty() {
+                    if existing_labels.is_empty() { None } else { Some(existing_labels) }
+                } else {
+                    Some(format!("{}{}", input.trim(), existing_labels))
+                };
+                
+                game.moves[idx].comment = new_comment.clone();
+                game.original_sgf.moves[idx].comment = new_comment;
                 let _ = game.save_to_file();
             }
             Some(UiMode::Normal)
@@ -210,7 +239,10 @@ pub fn handle_edit_comment_input(key: &KeyEvent, input: &mut String, game: &mut 
             None
         },
         KeyCode::Char(c) => {
-            input.push(c);
+            // Block underscores in comment input
+            if c != '_' {
+                input.push(c);
+            }
             None
         },
         _ => None
@@ -255,6 +287,52 @@ pub fn handle_insert_move_input(key: &KeyEvent, input: &mut String, color: &mut 
         },
         KeyCode::Backspace => {
             input.pop();
+            None
+        },
+        _ => None
+    }
+}
+
+// EditLabelInput handler
+pub fn handle_edit_label_input(key: &KeyEvent, input: &mut String, game: &mut GoGame) -> Option<UiMode> {
+    match key.code {
+        KeyCode::Esc => Some(UiMode::Normal),
+        KeyCode::Enter => {
+            if game.move_idx > 0 && game.move_idx <= game.moves.len() {
+                let idx = game.move_idx - 1;
+                let existing_comment = game.moves[idx].comment.clone().unwrap_or_default();
+                // Extract existing comment part (before first underscore)
+                let existing_comment_part = existing_comment.split('_').next().unwrap_or("").to_string();
+                
+                let new_comment = if input.trim().is_empty() {
+                    if existing_comment_part.is_empty() { None } else { Some(existing_comment_part) }
+                } else {
+                    // Convert comma-separated labels to underscore-separated
+                    let labels = input.split(',')
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<_>>()
+                        .join("_");
+                    
+                    if existing_comment_part.is_empty() {
+                        Some(format!("_{}", labels))
+                    } else {
+                        Some(format!("{}_{}", existing_comment_part, labels))
+                    }
+                };
+                
+                game.moves[idx].comment = new_comment.clone();
+                game.original_sgf.moves[idx].comment = new_comment;
+                let _ = game.save_to_file();
+            }
+            Some(UiMode::Normal)
+        },
+        KeyCode::Backspace => {
+            input.pop();
+            None
+        },
+        KeyCode::Char(c) => {
+            input.push(c);
             None
         },
         _ => None
