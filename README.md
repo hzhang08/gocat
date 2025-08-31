@@ -22,6 +22,12 @@ Install **gocat** via Cargo:
 cargo install gocat
 ```
 
+## Publishing Instructions
+
+1. Update version in `Cargo.toml`
+2. Run `cargo publish --dry-run`
+3. Run `cargo publish`
+
 ---
 
 ## Usage
